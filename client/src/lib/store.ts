@@ -68,6 +68,7 @@ interface AppState {
   halls: Hall[];
   bookings: Booking[];
   login: (email: string, role: UserRole) => boolean;
+  signup: (userData: Omit<User, 'id'>) => boolean;
   logout: () => void;
   addHall: (hall: Omit<Hall, 'id'>) => void;
   deleteHall: (id: string) => void;
@@ -87,14 +88,19 @@ export const useStore = create<AppState>()(
       bookings: [],
 
       login: (email, role) => {
-        // Simple mock login
         const user = get().users.find(u => u.email === email && u.role === role);
         if (user) {
           set({ currentUser: user });
           return true;
         }
-        // Auto-create user for demo if not found
-        const newUser = { id: Math.random().toString(36).substr(2, 9), name: email.split('@')[0], email, role };
+        return false;
+      },
+
+      signup: (userData) => {
+        const exists = get().users.find(u => u.email === userData.email && u.role === userData.role);
+        if (exists) return false;
+        
+        const newUser = { ...userData, id: Math.random().toString(36).substr(2, 9) };
         set(state => ({ 
           users: [...state.users, newUser],
           currentUser: newUser
