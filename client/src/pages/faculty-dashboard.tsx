@@ -1,143 +1,548 @@
-import { useState } from "react";
-import { useStore, Hall } from "@/lib/store";
-import DashboardLayout from "./dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Users, CheckCircle2, AlertCircle } from "lucide-react";
-import BookingCalendar from "@/components/booking-calendar";
-import { format, addDays } from "date-fns";
-import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { io, Socket } from "socket.io-client";
+import { Building2, Users, Clock, CheckCircle, XCircle, Calendar, LogOut, BookOpen } from "lucide-react";
+import { useStore } from "@/lib/store";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+
+interface Hall {
+  _id: string;
+  name: string;
+  capacity: string;
+  location?: string;
+  amenities?: string;
+  createdAt: string;
+}
+
+interface Booking {
+  _id: string;
+  hallId: string;
+  userId: string;
+  facultyName?: string;
+  bookingReason?: string;
+  bookingDate: string;
+  period: number;
+  status: "pending" | "accepted" | "booked" | "rejected" | "cancelled";
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+const PERIODS = [
+  { id: 1, time: "9:50-10:00" },
+  { id: 2, time: "10:00-10:45" },
+  { id: 3, time: "11:00-11:50" },
+  { id: 4, time: "11:50-12:45" },
+  { id: 5, time: "1:25-2:20" },
+  { id: 6, time: "2:20-3:05" },
+  { id: 7, time: "3:10-4:00" },
+  { id: 8, time: "4:00-4:50" },
+];
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case "pending": return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    case "accepted": return "bg-blue-100 text-blue-800 border-blue-300";
+    case "booked": return "bg-green-100 text-green-800 border-green-300";
+    case "rejected": return "bg-red-100 text-red-800 border-red-300";
+    case "cancelled": return "bg-gray-100 text-gray-800 border-gray-300";
+    default: return "bg-gray-100 text-gray-800 border-gray-300";
+  }
+};
 
 export default function FacultyDashboard() {
-  const { halls } = useStore();
-  const [selectedHallId, setSelectedHallId] = useState<string>(halls[0]?.id || '');
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  
-  const selectedHall = halls.find(h => h.id === selectedHallId);
+  const { toast } = useToast();
+  const [halls, setHalls] = useState<Hall[]>([]);
+  const [myBookings, setMyBookings] = useState<Booking[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [selectedHall, setSelectedHall] = useState<Hall | null>(null);
+  const [selectedDateForBook, setSelectedDateForBook] = useState<string>("");
+  const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
+  const [bookingReason, setBookingReason] = useState("");
+  const [bookedSlots, setBookedSlots] = useState<Map<string, number[]>>(new Map());
+  const setCurrentUser = useStore((state) => state.setCurrentUser);
 
-  // Date selection logic (Today + 2 days)
-  const today = new Date();
-  const dates = [today, addDays(today, 1), addDays(today, 2)];
+  useEffect(() => {
+    const newSocket = io();
+    setSocket(newSocket);
+    fetchHalls();
+    fetchMyBookings();
+
+    newSocket.on("hall:created", (hall: Hall) => {
+      setHalls((prev) => [...prev, hall]);
+      fetchHalls();
+    });
+
+    newSocket.on("booking:created", (booking: Booking | null) => {
+      if (!booking) return;
+      fetchMyBookings();
+      fetchBookedSlots();
+    });
+
+    newSocket.on("booking:updated", (booking: Booking | null) => {
+      if (!booking) return;
+      fetchMyBookings();
+      fetchBookedSlots();
+    });
+
+    newSocket.on("booking:cancelled", (booking: Booking | null) => {
+      if (!booking) return;
+      fetchMyBookings();
+      fetchBookedSlots();
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
+
+  const fetchHalls = async () => {
+    try {
+      const res = await fetch("/api/halls", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setHalls(data);
+        if (data.length > 0 && !selectedHall) {
+          setSelectedHall(data[0]);
+        }
+      } else {
+        toast({ title: "Error", description: "Failed to fetch halls", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to fetch halls", variant: "destructive" });
+    }
+  };
+
+  const fetchMyBookings = async () => {
+    try {
+      const res = await fetch("/api/bookings", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setMyBookings(data);
+        updateBookedSlots(data);
+      } else {
+        toast({ title: "Error", description: "Failed to fetch bookings", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to fetch bookings", variant: "destructive" });
+    }
+  };
+
+  const fetchBookedSlots = async () => {
+    try {
+      const res = await fetch("/api/bookings", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        updateBookedSlots(data);
+      } else {
+        console.error("Failed to fetch booked slots");
+      }
+    } catch (error) {
+      console.error("Failed to fetch booked slots");
+    }
+  };
+
+  const updateBookedSlots = (bookings: Booking[]) => {
+    const slots = new Map<string, number[]>();
+    bookings.forEach((booking) => {
+      if (booking.status === "booked" || booking.status === "accepted") {
+        const key = `${booking.hallId}-${booking.bookingDate}`;
+        if (!slots.has(key)) {
+          slots.set(key, []);
+        }
+        slots.get(key)!.push(booking.period);
+      }
+    });
+    setBookedSlots(slots);
+  };
+
+  const bookHall = async () => {
+    if (!selectedHall || !selectedDateForBook || !selectedPeriod || !bookingReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields including booking reason",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          hallId: selectedHall._id,
+          bookingDate: selectedDateForBook,
+          period: selectedPeriod,
+          bookingReason,
+        }),
+      });
+
+      if (res.ok) {
+        toast({ title: "✅ Success", description: "Booking request sent to admin" });
+        setSelectedDateForBook("");
+        setSelectedPeriod(null);
+        setBookingReason("");
+        fetchMyBookings();
+        fetchBookedSlots();
+      } else {
+        const error = await res.json();
+        toast({
+          title: "Error",
+          description: error.message || "Failed to book hall",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to book hall", variant: "destructive" });
+    }
+  };
+
+  const cancelBooking = async (bookingId: string) => {
+    if (!confirm("Are you sure you want to cancel this booking?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (res.ok) {
+        toast({ title: "✅ Success", description: "Booking cancelled" });
+        fetchMyBookings();
+        fetchBookedSlots();
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to cancel booking", variant: "destructive" });
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      setCurrentUser(null);
+    } catch (error) {
+      toast({ title: "Error", description: "Logout failed", variant: "destructive" });
+    }
+  };
+
+  const isSlotBooked = (hallId: string, date: string, period: number) => {
+    const key = `${hallId}-${date}`;
+    return bookedSlots.get(key)?.includes(period) || false;
+  };
+
+  const getTomorrowDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split("T")[0];
+  };
+
+  const stats = {
+    totalBookings: myBookings.length,
+    pendingBookings: myBookings.filter(b => b.status === "pending").length,
+    confirmedBookings: myBookings.filter(b => b.status === "accepted" || b.status === "booked").length,
+    rejectedBookings: myBookings.filter(b => b.status === "rejected").length,
+  };
 
   return (
-    <DashboardLayout 
-      title="Book a Seminar Hall" 
-      subtitle="Select a hall and time slot for your lecture or event."
-    >
-      <div className="grid lg:grid-cols-12 gap-8">
-        
-        {/* Left Sidebar - Hall Selection */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="space-y-4">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Available Halls</h3>
-            <div className="grid gap-3">
-              {halls.map((hall) => (
-                <div 
-                  key={hall.id}
-                  onClick={() => setSelectedHallId(hall.id)}
-                  className={cn(
-                    "cursor-pointer transition-all hover:scale-[1.02]",
-                    "border rounded-lg overflow-hidden text-left",
-                    selectedHallId === hall.id 
-                      ? "ring-2 ring-primary border-primary bg-primary/5 shadow-md" 
-                      : "bg-card hover:bg-accent/50"
-                  )}
-                >
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-semibold">{hall.name}</h4>
-                      <Badge variant="secondary" className="text-xs">
-                        <Users className="h-3 w-3 mr-1" />
-                        {hall.capacity}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{hall.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {hall.features.slice(0, 3).map((f, i) => (
-                        <span key={i} className="text-[10px] bg-background border px-1.5 py-0.5 rounded text-muted-foreground">
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+      {/* Header */}
+      <header className="bg-white border-b border-blue-100 shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-blue-900">Faculty Dashboard</h1>
+            <p className="text-sm text-blue-600">Book halls and manage your reservations</p>
+          </div>
+          <Button onClick={logout} variant="outline" className="gap-2">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-blue-600 font-medium">Total Bookings</p>
+                  <p className="text-3xl font-bold text-blue-900">{stats.totalBookings}</p>
                 </div>
-              ))}
-            </div>
+                <BookOpen className="h-10 w-10 text-blue-500 opacity-80" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-green-200 bg-gradient-to-br from-green-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-600 font-medium">Confirmed</p>
+                  <p className="text-3xl font-bold text-green-900">{stats.confirmedBookings}</p>
+                </div>
+                <CheckCircle className="h-10 w-10 text-green-500 opacity-80" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-yellow-200 bg-gradient-to-br from-yellow-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-yellow-600 font-medium">Pending</p>
+                  <p className="text-3xl font-bold text-yellow-900">{stats.pendingBookings}</p>
+                </div>
+                <Clock className="h-10 w-10 text-yellow-500 opacity-80" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-red-200 bg-gradient-to-br from-red-50 to-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-red-600 font-medium">Rejected</p>
+                  <p className="text-3xl font-bold text-red-900">{stats.rejectedBookings}</p>
+                </div>
+                <XCircle className="h-10 w-10 text-red-500 opacity-80" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Available Halls */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-xl font-semibold text-blue-900">Available Halls</h2>
+            {halls.length === 0 ? (
+              <Alert className="border-blue-200 bg-blue-50">
+                <AlertDescription className="text-blue-800">
+                  No halls available at the moment.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {halls.map((hall) => (
+                  <Card
+                    key={hall._id}
+                    className={`cursor-pointer transition-all border-blue-200 hover:shadow-lg ${
+                      selectedHall?._id === hall._id
+                        ? "ring-2 ring-blue-500 bg-blue-50"
+                        : "hover:border-blue-300"
+                    }`}
+                    onClick={() => setSelectedHall(hall)}
+                  >
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-semibold text-blue-900">{hall.name}</h3>
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Users className="h-4 w-4 text-blue-600" />
+                            <span>Capacity: {hall.capacity} seats</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Building2 className="h-4 w-4 text-blue-600" />
+                            <span>Location: {hall.location || "N/A"}</span>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            <strong>Amenities:</strong> {hall.amenities || "None"}
+                          </p>
+                        </div>
+                        {selectedHall?._id === hall._id && (
+                          <Badge className="bg-blue-600 text-white">Selected</Badge>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Booking Form */}
+          <div>
+            <Card className="border-blue-200">
+              <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Book a Hall
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                {selectedHall ? (
+                  <>
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-sm font-medium text-blue-900">Selected Hall:</p>
+                      <p className="text-lg font-semibold text-blue-800">{selectedHall.name}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-semibold text-gray-700">
+                        Reason for Booking *
+                      </Label>
+                      <Textarea
+                        placeholder="e.g., Lecture on Advanced Mathematics, Department Meeting, Workshop on AI, etc."
+                        value={bookingReason}
+                        onChange={(e) => setBookingReason(e.target.value)}
+                        className="mt-2 h-20 resize-none border-blue-200 focus:border-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-semibold text-gray-700">
+                        Date *
+                      </Label>
+                      <input
+                        type="date"
+                        value={selectedDateForBook}
+                        onChange={(e) => setSelectedDateForBook(e.target.value)}
+                        min={getTomorrowDate()}
+                        className="mt-2 w-full border border-blue-200 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-semibold text-gray-700">
+                        Time Period *
+                      </Label>
+                      <div className="mt-2 space-y-2">
+                        {PERIODS.map((period) => {
+                          const booked = selectedDateForBook
+                            ? isSlotBooked(selectedHall._id, selectedDateForBook, period.id)
+                            : false;
+                          return (
+                            <button
+                              key={period.id}
+                              onClick={() => !booked && setSelectedPeriod(period.id)}
+                              disabled={booked}
+                              className={`w-full py-3 px-4 text-sm rounded-lg border transition-all font-medium ${
+                                booked
+                                  ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200"
+                                  : selectedPeriod === period.id
+                                  ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                                  : "border-blue-200 hover:border-blue-500 hover:bg-blue-50 text-gray-700"
+                              }`}
+                            >
+                              {period.time}
+                              {booked && " (Booked)"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    <Button
+                      onClick={bookHall}
+                      className="w-full bg-blue-600 hover:bg-blue-700 py-3 text-base font-semibold"
+                      disabled={!bookingReason.trim() || !selectedDateForBook || !selectedPeriod}
+                    >
+                      Request Booking
+                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-sm text-gray-600">
+                      Select a hall from the list to start booking
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
 
-        {/* Right Main Area - Booking */}
-        <div className="lg:col-span-8 space-y-6">
-          {selectedHall && (
-            <Card className="border-none shadow-sm bg-card/50 backdrop-blur-sm">
-              <CardHeader className="pb-4 border-b">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl">{selectedHall.name}</CardTitle>
-                    <CardDescription className="flex items-center gap-2 mt-1">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      Ready for booking
-                    </CardDescription>
-                  </div>
-                  
-                  {/* Date Picker Buttons */}
-                  <div className="flex bg-muted p-1 rounded-lg">
-                    {dates.map((date, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedDate(date)}
-                        className={cn(
-                          "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                          date.toDateString() === selectedDate.toDateString()
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
+        {/* My Bookings */}
+        <div>
+          <h2 className="text-xl font-semibold text-blue-900 mb-4">My Bookings</h2>
+          {myBookings.length === 0 ? (
+            <Alert className="border-blue-200 bg-blue-50">
+              <AlertDescription className="text-blue-800">
+                You haven't made any bookings yet.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              {myBookings.map((booking) => {
+                const hall = halls.find((h) => h._id === booking.hallId);
+                const periodInfo = PERIODS.find((p) => p.id === booking.period);
+
+                return (
+                  <Card key={booking._id} className="border-blue-200 hover:shadow-lg transition-shadow">
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Hall</p>
+                            <p className="font-semibold text-blue-900">{hall?.name || "N/A"}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Date</p>
+                            <p className="font-semibold">
+                              {new Date(booking.bookingDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Period</p>
+                            <p className="font-semibold">{periodInfo?.time || "N/A"}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Status</p>
+                            <Badge className={getStatusColor(booking.status)}>
+                              {booking.status}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {booking.bookingReason && (
+                          <div>
+                            <p className="text-sm text-gray-600">Booking Reason</p>
+                            <p className="text-sm font-medium bg-gray-50 p-3 rounded-lg">
+                              {booking.bookingReason}
+                            </p>
+                          </div>
                         )}
-                      >
-                        {idx === 0 ? "Today" : format(date, "EEE, MMM d")}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="pt-6">
-                <BookingCalendar 
-                  hallId={selectedHall.id} 
-                  date={selectedDate} 
-                />
-              </CardContent>
 
-              <CardFooter className="bg-muted/30 border-t py-4 text-xs text-muted-foreground flex gap-4">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-green-100 border border-green-300"></div>
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-100 border border-red-300"></div>
-                  <span>Booked (Waitlist Available)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-amber-100 border border-amber-300"></div>
-                  <span>Your Booking</span>
-                </div>
-              </CardFooter>
-            </Card>
-          )}
+                        {booking.status === "rejected" && booking.rejectionReason && (
+                          <Alert className="bg-red-50 border-red-200">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                            <AlertDescription className="text-red-800">
+                              <strong>Rejection Reason:</strong> {booking.rejectionReason}
+                            </AlertDescription>
+                          </Alert>
+                        )}
 
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex gap-3 text-blue-900 text-sm">
-            <AlertCircle className="h-5 w-5 text-blue-600 shrink-0" />
-            <div>
-              <p className="font-semibold mb-1">Booking Policy Reminder</p>
-              <ul className="list-disc list-inside space-y-1 opacity-90">
-                <li>Faculty can book a maximum of 2 hours per day.</li>
-                <li>Bookings are only open for today and the next 2 days.</li>
-                <li>If a slot is taken, you will be added to the waitlist automatically.</li>
-              </ul>
+                        {(booking.status === "pending" || booking.status === "accepted") && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => cancelBooking(booking._id)}
+                            className="gap-2"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Cancel Booking
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
-          </div>
+          )}
         </div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 }

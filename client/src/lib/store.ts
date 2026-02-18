@@ -70,6 +70,7 @@ interface AppState {
   login: (email: string, role: UserRole) => boolean;
   signup: (userData: Omit<User, 'id'>) => boolean;
   logout: () => void;
+  setCurrentUser: (user: User | null) => void;
   addHall: (hall: Omit<Hall, 'id'>) => void;
   deleteHall: (id: string) => void;
   addBooking: (booking: Omit<Booking, 'id' | 'status' | 'timestamp'>) => { success: boolean; message: string; isWaitlist?: boolean };
@@ -109,6 +110,8 @@ export const useStore = create<AppState>()(
       },
 
       logout: () => set({ currentUser: null }),
+
+      setCurrentUser: (user) => set({ currentUser: user }),
 
       addHall: (hallData) => set(state => ({
         halls: [...state.halls, { ...hallData, id: Math.random().toString(36).substr(2, 9) }]

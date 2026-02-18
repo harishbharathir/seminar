@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useStore, UserRole } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,38 +10,79 @@ import { GraduationCap, ShieldCheck, User, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AuthPage() {
-  const login = useStore((state) => state.login);
-  const signup = useStore((state) => state.signup);
+  const [, setLocation] = useLocation();
+  const setCurrentUser = useStore((state) => state.setCurrentUser);
   const { toast } = useToast();
   
   const [isLogin, setIsLogin] = useState(true);
-  const [role, setRole] = useState<UserRole>("faculty");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [role, setRole] = useState<UserRole>("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || ( !isLogin && !name)) {
+    if (!username || !password) {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
       return;
     }
     
-    if (isLogin) {
-      const success = login(email, role);
-      if (success) {
-        toast({ title: "Welcome back", description: `Logged in as ${role}` });
+    setIsLoading(true);
+    try {
+      if (isLogin) {
+        // Login via API
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Store user in local state
+          setCurrentUser({
+            id: data.user._id,
+            name: data.user.username,
+            email: data.user.username,
+            role: data.user.role,
+          });
+          toast({ title: "Welcome back", description: `Logged in as ${data.user.role}` });
+          setLocation(data.user.role === "admin" ? "/admin" : "/");
+        } else {
+          const error = await res.json();
+          toast({ title: "Login Failed", description: error.message || "Invalid credentials", variant: "destructive" });
+        }
       } else {
-        toast({ title: "Login Failed", description: "Invalid credentials or role", variant: "destructive" });
+        // Signup via API
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ username, password, role }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Store user in local state
+          setCurrentUser({
+            id: data.user._id,
+            name: data.user.username,
+            email: data.user.username,
+            role: data.user.role,
+          });
+          toast({ title: "Account Created", description: `Welcome to CampusBook` });
+          setLocation(role === "admin" ? "/admin" : "/");
+        } else {
+          const error = await res.json();
+          toast({ title: "Signup Failed", description: error.message || "Failed to create account", variant: "destructive" });
+        }
       }
-    } else {
-      const success = signup({ name, email, role });
-      if (success) {
-        toast({ title: "Account Created", description: `Welcome to CampusBook, ${name}` });
-      } else {
-        toast({ title: "Signup Failed", description: "User already exists with this email and role", variant: "destructive" });
-      }
+    } catch (error) {
+      toast({ title: "Error", description: "Network error occurred", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -70,37 +112,21 @@ export default function AuthPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        id="name" 
-                        placeholder="Dr. John Doe" 
-                        className="pl-9"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-                
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="username">Username</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input 
-                      id="email" 
-                      type="email"
-                      placeholder="email@campus.edu" 
+                      id="username" 
+                      placeholder="your_username" 
                       className="pl-9"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
-
+                
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
@@ -112,12 +138,13 @@ export default function AuthPage() {
                       className="pl-9"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" size="lg">
-                  {isLogin ? "Sign In" : "Sign Up"}
+                <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  {isLoading ? "Loading..." : (isLogin ? "Sign In" : "Sign Up")}
                 </Button>
                 
                 <div className="text-center">
@@ -125,6 +152,7 @@ export default function AuthPage() {
                     type="button"
                     onClick={() => setIsLogin(!isLogin)}
                     className="text-sm text-primary hover:underline"
+                    disabled={isLoading}
                   >
                     {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
                   </button>

@@ -1,16 +1,40 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 
 const app = express();
 const httpServer = createServer(app);
+export const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'hall-scheduler-secret',
+  store: new (MemoryStore(session))({
+    checkPeriod: 86400000, // prune expired entries every 24h
+  }),
+  resave: false,
+  saveUninitialized: true, // Allow session to be set even if uninitialized
+  cookie: { 
+    secure: false, // set to true in production with HTTPS
+    httpOnly: false, // Allow client-side access for debugging
+    sameSite: 'lax'
+  }
+}));
 
 app.use(
   express.json({
@@ -90,11 +114,12 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
+      reusePort: process.env.NODE_ENV === "production",
     },
     () => {
       log(`serving on port ${port}`);
