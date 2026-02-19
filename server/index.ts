@@ -11,8 +11,9 @@ const app = express();
 const httpServer = createServer(app);
 export const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: "*",
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
@@ -114,7 +115,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   if (!process.env.VERCEL) {
-    const port = parseInt(process.env.PORT || "5000", 10);
+    const port = parseInt(process.env.PORT || process.env.SERVER_PORT || "5000", 10);
     const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
     httpServer.listen(
       {
@@ -123,7 +124,7 @@ app.use((req, res, next) => {
         reusePort: process.env.NODE_ENV === "production",
       },
       () => {
-        log(`serving on port ${port}`);
+        log(`Server running on http://${host}:${port}`);
       },
     );
   }

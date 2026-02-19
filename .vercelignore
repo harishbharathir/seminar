@@ -1,0 +1,7 @@
+node_modules
+.env.local
+.local
+*.log
+.replit
+debug-login.js
+script/test-*.ts

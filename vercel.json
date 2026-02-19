@@ -1,19 +1,9 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/dist/index.mjs"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/dist/index.mjs"
-    }
-  ]
+  "buildCommand": "npm run build:client",
+  "outputDirectory": "dist/public",
+  "installCommand": "npm install",
+  "framework": null,
+  "env": {
+    "VITE_API_URL": "https://your-render-backend.onrender.com"
+  }
 }
