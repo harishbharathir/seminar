@@ -290,7 +290,7 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(publicPath));
 
   // Catch-all route for SPA
-  app.get('*', (req, res) => {
+  app.get('/*path', (req, res) => {
     // Skip API routes
     if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
     res.sendFile(join(publicPath, 'index.html'));
