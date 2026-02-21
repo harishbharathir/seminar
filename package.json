@@ -7,7 +7,7 @@
     "dev:client": "vite dev --port 3000",
     "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build": "tsx script/build.ts",
+    "build": "vite build --outDir dist/public && tsx script/build.ts",
     "build:server": "tsx script/build.ts && echo 'Backend build complete'",
     "build:client": "vite build --outDir dist/public",
     "start:server": "cross-env NODE_ENV=production node dist/index.mjs",
