@@ -16,7 +16,7 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Connect to MongoDB
 connectDB();
@@ -283,6 +283,19 @@ app.delete('/api/users/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });
+
+// --- SERVE FRONTEND (Production) ---
+if (process.env.NODE_ENV === 'production') {
+  const publicPath = join(__dirname, 'public');
+  app.use(express.static(publicPath));
+
+  // Catch-all route for SPA
+  app.get('*', (req, res) => {
+    // Skip API routes
+    if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+    res.sendFile(join(publicPath, 'index.html'));
+  });
+}
 
 httpServer.listen(PORT, () => {
   console.log(`Server & Socket.io running on port ${PORT}`);
