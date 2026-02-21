@@ -13,7 +13,7 @@ export default function AuthPage() {
   const [, setLocation] = useLocation();
   const setCurrentUser = useStore((state) => state.setCurrentUser);
   const { toast } = useToast();
-  
+
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState<UserRole>("admin");
   const [username, setUsername] = useState("");
@@ -22,12 +22,12 @@ export default function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!username || !password) {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
       return;
     }
-    
+
     setIsLoading(true);
     try {
       if (isLogin) {
@@ -41,11 +41,11 @@ export default function AuthPage() {
 
         if (res.ok) {
           const data = await res.json();
-          // Store user in local state
           setCurrentUser({
-            id: data.user._id,
-            name: data.user.username,
-            email: data.user.username,
+            id: data.user.id,
+            name: data.user.name || data.user.username,
+            email: data.user.email || "",
+            department: data.user.department,
             role: data.user.role,
           });
           toast({ title: "Welcome back", description: `Logged in as ${data.user.role}` });
@@ -65,11 +65,11 @@ export default function AuthPage() {
 
         if (res.ok) {
           const data = await res.json();
-          // Store user in local state
           setCurrentUser({
-            id: data.user._id,
-            name: data.user.username,
-            email: data.user.username,
+            id: data.user.id,
+            name: data.user.name || data.user.username,
+            email: data.user.email || "",
+            department: data.user.department,
             role: data.user.role,
           });
           toast({ title: "Account Created", description: `Welcome to CampusBook` });
@@ -105,8 +105,8 @@ export default function AuthPage() {
               </Tabs>
               <CardTitle>{isLogin ? "Welcome Back" : "Create Account"}</CardTitle>
               <CardDescription>
-                {isLogin 
-                  ? `Sign in to your ${role} account` 
+                {isLogin
+                  ? `Sign in to your ${role} account`
                   : `Join as a ${role} to manage bookings`}
               </CardDescription>
             </CardHeader>
@@ -116,9 +116,9 @@ export default function AuthPage() {
                   <Label htmlFor="username">Username</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="username" 
-                      placeholder="your_username" 
+                    <Input
+                      id="username"
+                      placeholder="your_username"
                       className="pl-9"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
@@ -126,15 +126,15 @@ export default function AuthPage() {
                     />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="password" 
+                    <Input
+                      id="password"
                       type="password"
-                      placeholder="••••••••" 
+                      placeholder="••••••••"
                       className="pl-9"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -146,9 +146,9 @@ export default function AuthPage() {
                 <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
                   {isLoading ? "Loading..." : (isLogin ? "Sign In" : "Sign Up")}
                 </Button>
-                
+
                 <div className="text-center">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setIsLogin(!isLogin)}
                     className="text-sm text-primary hover:underline"
@@ -165,9 +165,9 @@ export default function AuthPage() {
 
       <div className="hidden lg:block relative overflow-hidden">
         <div className="absolute inset-0 bg-primary/30 mix-blend-multiply z-10" />
-        <img 
-          src="/src/assets/images/login-bg.jpg" 
-          alt="Modern University" 
+        <img
+          src="/src/assets/images/login-bg.jpg"
+          alt="Modern University"
           className="h-full w-full object-cover scale-105 animate-pulse-slow"
         />
         <div className="absolute inset-0 flex flex-col justify-end p-12 text-white bg-linear-to-t from-black/80 via-black/20 to-transparent z-20">

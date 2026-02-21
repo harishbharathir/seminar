@@ -30,11 +30,6 @@ export default defineConfig({
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
-  css: {
-    postcss: {
-      plugins: [],
-    },
-  },
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
@@ -43,20 +38,21 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 3000,
+    strictPort: true, // Force port 3000 so the proxy target remains predictable
     proxy: {
+      // Directs API calls to the Express server
       "/api": {
         target: "http://localhost:3001",
         changeOrigin: true,
+        secure: false,
       },
+      // Directs Socket.io traffic to the Express server
       "/socket.io": {
         target: "http://localhost:3001",
         ws: true,
+        changeOrigin: true,
       },
     },
     allowedHosts: true,
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
   },
 });

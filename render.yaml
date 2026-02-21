@@ -1,11 +1,15 @@
 services:
   - type: web
-    name: hall-scheduler-backend
+    name: hall-scheduler
     env: node
-    buildCommand: npm install
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
       - key: PORT
-        value: 5000
+        value: 10000

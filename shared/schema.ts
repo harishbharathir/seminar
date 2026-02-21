@@ -1,64 +1,49 @@
+import { mongodbTable, text, int, timestamp, objectId } from "drizzle-orm/mongodb-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// TypeScript types for MongoDB documents
-export interface User {
-  _id: string;
-  username: string;
-  password: string;
-  role: "admin" | "faculty";
-  email?: string;
-  createdAt: string;
-}
-
-export interface Hall {
-  _id: string;
-  name: string;
-  capacity: string;
-  location?: string;
-  amenities?: string;
-  createdBy: string;
-  createdAt: string;
-}
-
-export interface Booking {
-  _id: string;
-  hallId: string;
-  userId: string;
-  bookingReason?: string;
-  bookingDate: string;
-  period: number; // 1-8 representing the time period
-  status: "pending" | "accepted" | "booked" | "rejected" | "cancelled";
-  rejectionReason?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-// Zod schemas for form validation
-export const insertUserSchema = z.object({
-  username: z.string().min(3),
-  password: z.string().min(6),
-  role: z.enum(["admin", "faculty"]).optional(),
-  email: z.string().email().optional(),
+export const users = mongodbTable("users", {
+    id: objectId("id").primaryKey(),
+    username: text("username").notNull(),
+    password: text("password").notNull(),
+    role: text("role").$type<"admin" | "faculty">().default("faculty"),
+    email: text("email"),
+    createdAt: timestamp("createdAt").defaultNow(),
 });
 
-export const insertHallSchema = z.object({
-  name: z.string().min(1),
-  capacity: z.string().or(z.number()).transform(String),
-  location: z.string().optional(),
-  amenities: z.string().optional(),
-  createdBy: z.string(),
+export const halls = mongodbTable("halls", {
+    id: objectId("id").primaryKey(),
+    name: text("name").notNull(),
+    capacity: text("capacity").notNull(),
+    location: text("location"),
+    amenities: text("amenities"),
+    createdAt: timestamp("createdAt").defaultNow(),
 });
 
-export const insertBookingSchema = z.object({
-  hallId: z.string(),
-  userId: z.string(),
-  bookingReason: z.string().optional(),
-  bookingDate: z.string(),
-  period: z.number().min(1).max(8),
-  rejectionReason: z.string().optional(),
+export const bookings = mongodbTable("bookings", {
+    id: objectId("id").primaryKey(),
+    hallId: text("hallId").notNull(),
+    userId: text("userId").notNull(),
+    facultyName: text("facultyName"),
+    bookingReason: text("bookingReason").notNull(),
+    bookingDate: text("bookingDate").notNull(),
+    period: int("period").notNull(),
+    status: text("status").$type<"pending" | "accepted" | "booked" | "rejected" | "cancelled">().default("pending"),
+    rejectionReason: text("rejectionReason"),
+    createdAt: timestamp("createdAt").defaultNow(),
+    updatedAt: timestamp("updatedAt"),
 });
 
-// Type exports
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type InsertHall = z.infer<typeof insertHallSchema>;
-export type InsertBooking = z.infer<typeof insertBookingSchema>;
+export const insertUserSchema = createInsertSchema(users);
+export const selectUserSchema = createSelectSchema(users);
+export const insertHallSchema = createInsertSchema(halls);
+export const selectHallSchema = createSelectSchema(halls);
+export const insertBookingSchema = createInsertSchema(bookings);
+export const selectBookingSchema = createSelectSchema(bookings);
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type Hall = typeof halls.$inferSelect;
+export type NewHall = typeof halls.$inferInsert;
+export type Booking = typeof bookings.$inferSelect;
+export type NewBooking = typeof bookings.$inferInsert;

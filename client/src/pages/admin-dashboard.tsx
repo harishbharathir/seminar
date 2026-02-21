@@ -15,15 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useStore } from "@/lib/store";
 
 interface User {
-  _id: string;
+  id: string;
   username: string;
+  name?: string;
   email?: string;
+  department?: string;
   role: "admin" | "faculty";
   createdAt: string;
 }
 
 interface Hall {
-  _id: string;
+  id: string;
   name: string;
   capacity: string;
   location?: string;
@@ -32,7 +34,7 @@ interface Hall {
 }
 
 interface Booking {
-  _id: string;
+  id: string;
   hallId: string;
   userId: string;
   facultyName?: string;
@@ -91,7 +93,9 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({
     username: "",
     password: "",
+    name: "",
     email: "",
+    department: "",
     role: "faculty" as "admin" | "faculty",
   });
 
@@ -116,12 +120,12 @@ export default function AdminDashboard() {
 
     newSocket.on("booking:updated", (booking: Booking | null) => {
       if (!booking) return;
-      setBookings((prev) => prev.map((b) => (b._id === booking._id ? booking : b)));
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? booking : b)));
     });
 
     newSocket.on("booking:cancelled", (booking: Booking | null) => {
       if (!booking) return;
-      setBookings((prev) => prev.map((b) => (b._id === booking._id ? booking : b)));
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? booking : b)));
     });
 
     return () => {
@@ -211,7 +215,7 @@ export default function AdminDashboard() {
       });
 
       if (res.ok) {
-        setNewUser({ username: "", password: "", email: "", role: "faculty" });
+        setNewUser({ username: "", password: "", name: "", email: "", department: "", role: "faculty" });
         setShowNewUserDialog(false);
         fetchUsers();
         toast({ title: "✅ Success", description: "Faculty account created successfully" });
@@ -315,9 +319,9 @@ export default function AdminDashboard() {
   };
 
   const filteredBookings = bookings.filter((booking) => {
-    const hall = halls.find((h) => h._id === booking.hallId);
-    const matchesSearch = hall?.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          booking.bookingReason?.toLowerCase().includes(searchQuery.toLowerCase());
+    const hall = halls.find((h) => h.id === booking.hallId);
+    const matchesSearch = hall?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.bookingReason?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || booking.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -426,7 +430,7 @@ export default function AdminDashboard() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {halls.map((hall) => (
-                  <Card key={hall._id} className="border-blue-200 hover:shadow-lg transition-shadow">
+                  <Card key={hall.id} className="border-blue-200 hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
                       <CardTitle className="text-lg">{hall.name}</CardTitle>
                     </CardHeader>
@@ -466,14 +470,14 @@ export default function AdminDashboard() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {users.filter(u => u.role === "faculty").map((user) => (
-                  <Card key={user._id} className="border-blue-200 hover:shadow-lg transition-shadow">
+                  <Card key={user.id} className="border-blue-200 hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
                       <CardTitle className="text-lg flex items-center justify-between">
                         {user.username}
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => deleteUser(user._id)}
+                          onClick={() => deleteUser(user.id)}
                           className="h-8 w-8 p-0"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -518,14 +522,14 @@ export default function AdminDashboard() {
                   </Alert>
                 ) : (
                   halls.map((hall) => (
-                    <Card key={hall._id} className="border-blue-200">
+                    <Card key={hall.id} className="border-blue-200">
                       <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
                         <CardTitle className="text-lg">{hall.name}</CardTitle>
                       </CardHeader>
                       <CardContent className="pt-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {PERIODS.map((period) => {
-                            const booking = getPeriodStatus(hall._id, period.id);
+                            const booking = getPeriodStatus(hall.id, period.id);
                             return (
                               <div key={period.id} className="p-3 border rounded-lg bg-gray-50">
                                 <p className="font-semibold text-sm text-gray-700">{period.time}</p>
@@ -559,11 +563,11 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-4">
                 {bookings.filter((b) => b.status === "pending").map((booking) => {
-                  const hall = halls.find((h) => h._id === booking.hallId);
+                  const hall = halls.find((h) => h.id === booking.hallId);
                   const periodInfo = PERIODS.find((p) => p.id === booking.period);
 
                   return (
-                    <Card key={booking._id} className="border-blue-200 hover:shadow-lg transition-shadow">
+                    <Card key={booking.id} className="border-blue-200 hover:shadow-lg transition-shadow">
                       <CardContent className="pt-6">
                         <div className="space-y-4">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -591,7 +595,7 @@ export default function AdminDashboard() {
                             </div>
                           )}
                           <div className="flex gap-2">
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateBookingStatus(booking._id, "accepted")}>
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateBookingStatus(booking.id, "accepted")}>
                               Accept
                             </Button>
                             <Button size="sm" variant="destructive" onClick={() => setSelectedBookingForReject(booking)}>
@@ -642,11 +646,11 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {filteredBookings.map((booking) => {
-                  const hall = halls.find((h) => h._id === booking.hallId);
+                  const hall = halls.find((h) => h.id === booking.hallId);
                   const periodInfo = PERIODS.find((p) => p.id === booking.period);
 
                   return (
-                    <Card key={booking._id} className="border-blue-200">
+                    <Card key={booking.id} className="border-blue-200">
                       <CardContent className="pt-4">
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                           <div>
@@ -721,7 +725,7 @@ export default function AdminDashboard() {
               <Label htmlFor="reason">Reason for Rejection *</Label>
               <Input id="reason" placeholder="Enter rejection reason..." value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} />
             </div>
-            <Button variant="destructive" onClick={() => selectedBookingForReject && updateBookingStatus(selectedBookingForReject._id, "rejected")} className="w-full">
+            <Button variant="destructive" onClick={() => selectedBookingForReject && updateBookingStatus(selectedBookingForReject.id, "rejected")} className="w-full">
               Confirm Rejection
             </Button>
           </div>
@@ -737,31 +741,49 @@ export default function AdminDashboard() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="username">Username *</Label>
-              <Input 
-                id="username" 
-                placeholder="e.g., john.doe" 
-                value={newUser.username} 
-                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} 
+              <Input
+                id="username"
+                placeholder="e.g., john.doe"
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
               />
             </div>
             <div>
               <Label htmlFor="password">Password *</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                placeholder="Enter password" 
-                value={newUser.password} 
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} 
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Dr. John Doe"
+                value={newUser.name}
+                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
               />
             </div>
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="john.doe@university.edu" 
-                value={newUser.email} 
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} 
+              <Input
+                id="email"
+                type="email"
+                placeholder="john.doe@university.edu"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="department">Department</Label>
+              <Input
+                id="department"
+                placeholder="e.g., Computer Science"
+                value={newUser.department}
+                onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
               />
             </div>
             <div>

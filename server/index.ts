@@ -1,134 +1,289 @@
-import "dotenv/config";
-import express, { type Request, Response, NextFunction } from "express";
-import session from "express-session";
-import MemoryStore from "memorystore";
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
-import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
+import cors from 'cors';
+import express from 'express';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import bcrypt from 'bcryptjs';
+import { connectDB } from './db';
+import { User, Hall, Booking } from './models';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-export const io = new SocketIOServer(httpServer, {
+const PORT = 3001;
+
+// Connect to MongoDB
+connectDB();
+
+// Initialize Socket.io
+const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
+    origin: "http://localhost:3000",
+    credentials: true
+  }
 });
 
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'hall-scheduler-secret',
-  store: new (MemoryStore(session))({
-    checkPeriod: 86400000, // prune expired entries every 24h
-  }),
+  secret: process.env.SESSION_SECRET || 'development-secret',
   resave: false,
-  saveUninitialized: true, // Allow session to be set even if uninitialized
-  cookie: { 
-    secure: false, // set to true in production with HTTPS
-    httpOnly: false, // Allow client-side access for debugging
-    sameSite: 'lax'
+  saveUninitialized: false,
+  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport Strategy
+passport.use(new LocalStrategy(async (username, password, done) => {
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return done(null, false, { message: 'User not found' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return done(null, false, { message: 'Invalid password' });
+
+    return done(null, user);
+  } catch (err) {
+    return done(err);
   }
 }));
 
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.use(express.urlencoded({ extended: false }));
-
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
+passport.serializeUser((user: any, done) => done(null, user.id));
+passport.deserializeUser(async (id: string, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
 });
 
-(async () => {
-  await registerRoutes(httpServer, app);
+// --- SOCKET.IO LOGIC ---
+io.on('connection', (socket) => {
+  console.log('User connected to socket:', socket.id);
+  socket.on('disconnect', () => console.log('User disconnected'));
+});
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-    console.error("Internal Server Error:", err);
+// --- AUTH ROUTES ---
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password, role, name, email, department } = req.body;
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({
+      username,
+      password: hashedPassword,
+      role: role || 'faculty',
+      name,
+      email,
+      department,
+      createdAt: new Date().toISOString()
+    }) as any;
+    res.status(201).json({ message: "User registered", user: { id: newUser.id, username, role: newUser.role, name, email, department } });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
 
-    if (res.headersSent) {
+app.post('/api/auth/login', (req, res, next) => {
+  console.log('--- POST /api/auth/login ---');
+  console.log('Username:', req.body.username);
+  passport.authenticate('local', (err: any, user: any, info: any) => {
+    if (err) {
+      console.error('Passport authenticate error:', err);
       return next(err);
     }
+    if (!user) {
+      console.log('Login failed:', info?.message);
+      return res.status(401).json({ message: info?.message || 'Login failed' });
+    }
+    req.logIn(user, (err) => {
+      if (err) {
+        console.error('req.logIn error:', err);
+        return next(err);
+      }
+      console.log('Login successful. SessionID:', req.sessionID);
+      res.json({ message: "Logged in", user: { id: user.id, username: user.username, role: user.role, name: user.name, email: user.email, department: user.department } });
+    });
+  })(req, res, next);
+});
 
-    return res.status(status).json({ message });
+app.post('/api/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ message: 'Logged out successfully' });
   });
+});
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+// --- HALLS ROUTES ---
+app.get('/api/halls', async (req, res) => {
+  try {
+    const hallsList = await Hall.find();
+    res.json(hallsList);
+  } catch (err) {
+    console.error('Fetch halls error:', err);
+    res.status(500).json({ error: 'Failed to fetch halls' });
   }
+});
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  if (!process.env.VERCEL) {
-    const port = parseInt(process.env.PORT || process.env.SERVER_PORT || "5000", 10);
-    const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost";
-    httpServer.listen(
-      {
-        port,
-        host,
-        reusePort: process.env.NODE_ENV === "production",
-      },
-      () => {
-        log(`Server running on http://${host}:${port}`);
-      },
+app.post('/api/halls', async (req, res) => {
+  try {
+    const hall = await Hall.create({
+      ...req.body,
+      createdAt: new Date().toISOString()
+    });
+    io.emit('hall:created', hall);
+    res.status(201).json(hall);
+  } catch (err) {
+    console.error('Create hall error:', err);
+    res.status(500).json({ error: 'Failed to create hall' });
+  }
+});
+
+// --- BOOKINGS ROUTES ---
+app.get('/api/bookings', async (req, res) => {
+  try {
+    const bookingsList = await Booking.find();
+    res.json(bookingsList);
+  } catch (err) {
+    console.error('Fetch bookings error:', err);
+    res.status(500).json({ error: 'Failed to fetch bookings' });
+  }
+});
+
+app.post('/api/bookings', async (req, res) => {
+  console.log('--- POST /api/bookings ---');
+  console.log('SessionID:', req.sessionID);
+  console.log('Cookies:', req.headers.cookie);
+  console.log('Authenticated:', req.isAuthenticated());
+  console.log('User:', req.user ? (req.user as any).username : 'undefined');
+
+  try {
+    if (!req.isAuthenticated()) {
+      console.log('Unauthorized booking attempt');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const user = req.user as any;
+    const bookingData = {
+      ...req.body,
+      userId: user.id || user._id,
+      facultyName: user.name || user.username,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    console.log('Creating booking with data:', JSON.stringify(bookingData, null, 2));
+
+    const booking = await Booking.create(bookingData);
+    io.emit('booking:created', booking);
+    res.status(201).json(booking);
+  } catch (err) {
+    console.error('Create booking error details:', err);
+    res.status(500).json({ error: 'Failed to create booking', details: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.patch('/api/bookings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await Booking.findByIdAndUpdate(
+      id,
+      { ...req.body, updatedAt: new Date().toISOString() },
+      { new: true }
     );
+    if (booking) {
+      io.emit('booking:updated', booking);
+      res.json(booking);
+    } else {
+      res.status(404).json({ message: "Booking not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update booking' });
   }
-})();
+});
 
-// Export for Vercel serverless
-export default app;
+app.delete('/api/bookings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await Booking.findByIdAndDelete(id);
+    if (booking) {
+      io.emit('booking:cancelled', booking);
+      res.json({ message: "Booking cancelled" });
+    } else {
+      res.status(404).json({ message: "Booking not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
+});
+
+// --- USERS ROUTES (Admin only) ---
+app.get('/api/users', async (req, res) => {
+  try {
+    const usersList = await User.find({}, '-password');
+    res.json(usersList);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, password, role, email, name, department } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({
+      username,
+      password: hashedPassword,
+      role: role || 'faculty',
+      email,
+      name,
+      department,
+      createdAt: new Date().toISOString()
+    }) as any;
+    const userResponse = newUser.toJSON();
+    delete (userResponse as any).password;
+    res.status(201).json(userResponse);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByIdAndDelete(id);
+    if (user) {
+      res.json({ message: "User deleted" });
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+httpServer.listen(PORT, () => {
+  console.log(`Server & Socket.io running on port ${PORT}`);
+});

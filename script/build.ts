@@ -1,67 +1,46 @@
-import { build as esbuild } from "esbuild";
-import { build as viteBuild } from "vite";
-import { rm, readFile } from "fs/promises";
+import { build } from "esbuild";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import fs from "fs";
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
-const allowlist = [
-  "@google/generative-ai",
-  "axios",
-  "connect-pg-simple",
-  "cors",
-  "date-fns",
-  "drizzle-orm",
-  "drizzle-zod",
-  "express",
-  "express-rate-limit",
-  "express-session",
-  "jsonwebtoken",
-  "memorystore",
-  "multer",
-  "nanoid",
-  "nodemailer",
-  "openai",
-  "passport",
-  "passport-local",
-  "pg",
-  "stripe",
-  "uuid",
-  "ws",
-  "xlsx",
-  "zod",
-  "zod-validation-error",
-];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const root = join(__dirname, "..");
 
-async function buildAll() {
-  await rm("dist", { recursive: true, force: true });
+async function runBuild() {
+    // Ensure dist directory exists
+    if (!fs.existsSync(join(root, "dist"))) {
+        fs.mkdirSync(join(root, "dist"));
+    }
 
-  console.log("building client...");
-  await viteBuild();
-
-  console.log("building server...");
-  const pkg = JSON.parse(await readFile("package.json", "utf-8"));
-  const allDeps = [
-    ...Object.keys(pkg.dependencies || {}),
-    ...Object.keys(pkg.devDependencies || {}),
-  ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
-
-  await esbuild({
-    entryPoints: ["server/index.ts"],
-    platform: "node",
-    bundle: true,
-    format: "esm",
-    outfile: "dist/index.mjs",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-    },
-    minify: true,
-    external: externals,
-    logLevel: "info",
-  });
+    // Build the backend
+    console.log("Building backend...");
+    await build({
+        entryPoints: [join(root, "server/index.ts")],
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        outfile: join(root, "dist/index.mjs"),
+        external: [
+            "express",
+            "mongodb",
+            "mongoose",
+            "socket.io",
+            "bcryptjs",
+            "passport",
+            "passport-local",
+            "express-session",
+            "cors",
+            "dotenv"
+        ],
+        banner: {
+            js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);',
+        },
+    });
+    console.log("Backend build complete: dist/index.mjs");
 }
 
-buildAll().catch((err) => {
-  console.error(err);
-  process.exit(1);
+runBuild().catch((err) => {
+    console.error("Build failed:", err);
+    process.exit(1);
 });

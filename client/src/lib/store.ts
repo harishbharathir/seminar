@@ -9,6 +9,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  department?: string;
   role: UserRole;
 }
 
@@ -34,26 +35,26 @@ export interface Booking {
 
 // Default Data
 const MOCK_HALLS: Hall[] = [
-  { 
-    id: 'h1', 
-    name: 'Main Auditorium', 
-    capacity: 500, 
-    features: ['Projector', 'AC', 'Surround Sound', 'Stage'], 
-    description: 'Our largest venue, perfect for convocations and large seminars.' 
+  {
+    id: 'h1',
+    name: 'Main Auditorium',
+    capacity: 500,
+    features: ['Projector', 'AC', 'Surround Sound', 'Stage'],
+    description: 'Our largest venue, perfect for convocations and large seminars.'
   },
-  { 
-    id: 'h2', 
-    name: 'Lecture Hall A', 
-    capacity: 120, 
-    features: ['Smart Board', 'AC', 'Mic System'], 
-    description: 'Modern tiered seating lecture hall.' 
+  {
+    id: 'h2',
+    name: 'Lecture Hall A',
+    capacity: 120,
+    features: ['Smart Board', 'AC', 'Mic System'],
+    description: 'Modern tiered seating lecture hall.'
   },
-  { 
-    id: 'h3', 
-    name: 'Seminar Room 101', 
-    capacity: 50, 
-    features: ['Projector', 'Whiteboard'], 
-    description: 'Intimate setting for department meetings and small workshops.' 
+  {
+    id: 'h3',
+    name: 'Seminar Room 101',
+    capacity: 50,
+    features: ['Projector', 'Whiteboard'],
+    description: 'Intimate setting for department meetings and small workshops.'
   },
 ];
 
@@ -100,9 +101,9 @@ export const useStore = create<AppState>()(
       signup: (userData) => {
         const exists = get().users.find(u => u.email === userData.email && u.role === userData.role);
         if (exists) return false;
-        
+
         const newUser = { ...userData, id: Math.random().toString(36).substr(2, 9) };
-        set(state => ({ 
+        set(state => ({
           users: [...state.users, newUser],
           currentUser: newUser
         }));
@@ -116,7 +117,7 @@ export const useStore = create<AppState>()(
       addHall: (hallData) => set(state => ({
         halls: [...state.halls, { ...hallData, id: Math.random().toString(36).substr(2, 9) }]
       })),
-      
+
       deleteHall: (id) => set(state => ({
         halls: state.halls.filter(h => h.id !== id),
         bookings: state.bookings.filter(b => b.hallId !== id) // Cascade delete bookings? Or keep them? Let's clean up.
@@ -125,37 +126,37 @@ export const useStore = create<AppState>()(
       addBooking: (bookingData) => {
         const state = get();
         const { currentUser, bookings } = state;
-        
+
         if (!currentUser) return { success: false, message: 'Not logged in' };
 
         const bookingDate = new Date(bookingData.date);
-        
+
         // 1. Validation: Faculty Constraints
         if (currentUser.role === 'faculty') {
           // Rule: Can book only for two days from present
           const today = startOfDay(new Date());
           const maxDate = addDays(today, 2);
-          
+
           if (isBefore(bookingDate, today) || isAfter(bookingDate, maxDate)) {
             return { success: false, message: 'Faculty can only book up to 2 days in advance.' };
           }
 
           // Rule: Max 2 hours per day (2 slots)
-          const userBookingsForDay = bookings.filter(b => 
-            b.userId === currentUser.id && 
+          const userBookingsForDay = bookings.filter(b =>
+            b.userId === currentUser.id &&
             isSameDay(new Date(b.date), bookingDate) &&
             b.status === 'confirmed'
           );
 
           if (userBookingsForDay.length >= 2) {
-             return { success: false, message: 'Daily limit reached (max 2 hours).' };
+            return { success: false, message: 'Daily limit reached (max 2 hours).' };
           }
         }
 
         // 2. Check Availability & Waitlist
-        const existingBooking = bookings.find(b => 
-          b.hallId === bookingData.hallId && 
-          isSameDay(new Date(b.date), bookingDate) && 
+        const existingBooking = bookings.find(b =>
+          b.hallId === bookingData.hallId &&
+          isSameDay(new Date(b.date), bookingDate) &&
           b.slot === bookingData.slot &&
           b.status === 'confirmed'
         );
@@ -179,23 +180,23 @@ export const useStore = create<AppState>()(
       cancelBooking: (bookingId) => {
         const state = get();
         const bookingToCancel = state.bookings.find(b => b.id === bookingId);
-        
+
         if (!bookingToCancel) return;
 
         // If cancelling a confirmed booking, promote the next waitlisted person
         let updatedBookings = state.bookings.filter(b => b.id !== bookingId);
 
         if (bookingToCancel.status === 'confirmed') {
-          const waitlistedBookings = updatedBookings.filter(b => 
-            b.hallId === bookingToCancel.hallId && 
-            isSameDay(new Date(b.date), new Date(bookingToCancel.date)) && 
+          const waitlistedBookings = updatedBookings.filter(b =>
+            b.hallId === bookingToCancel.hallId &&
+            isSameDay(new Date(b.date), new Date(bookingToCancel.date)) &&
             b.slot === bookingToCancel.slot &&
             b.status === 'waitlist'
           ).sort((a, b) => a.timestamp - b.timestamp);
 
           if (waitlistedBookings.length > 0) {
             const promotedBookingId = waitlistedBookings[0].id;
-            updatedBookings = updatedBookings.map(b => 
+            updatedBookings = updatedBookings.map(b =>
               b.id === promotedBookingId ? { ...b, status: 'confirmed' } : b
             );
           }
@@ -209,15 +210,15 @@ export const useStore = create<AppState>()(
       getBookingsForDate: (date) => {
         return get().bookings.filter(b => isSameDay(new Date(b.date), date));
       },
-      
+
       getWaitlistPosition: (bookingId) => {
         const state = get();
         const myBooking = state.bookings.find(b => b.id === bookingId);
         if (!myBooking || myBooking.status !== 'waitlist') return 0;
 
-        const waitlistBeforeMe = state.bookings.filter(b => 
-          b.hallId === myBooking.hallId && 
-          isSameDay(new Date(b.date), new Date(myBooking.date)) && 
+        const waitlistBeforeMe = state.bookings.filter(b =>
+          b.hallId === myBooking.hallId &&
+          isSameDay(new Date(b.date), new Date(myBooking.date)) &&
           b.slot === myBooking.slot &&
           b.status === 'waitlist' &&
           b.timestamp < myBooking.timestamp

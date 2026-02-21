@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
 interface Hall {
-  _id: string;
+  id: string;
   name: string;
   capacity: string;
   location?: string;
@@ -21,7 +21,7 @@ interface Hall {
 }
 
 interface Booking {
-  _id: string;
+  id: string;
   hallId: string;
   userId: string;
   facultyName?: string;
@@ -66,6 +66,7 @@ export default function FacultyDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [bookingReason, setBookingReason] = useState("");
   const [bookedSlots, setBookedSlots] = useState<Map<string, number[]>>(new Map());
+  const currentUser = useStore((state) => state.currentUser);
   const setCurrentUser = useStore((state) => state.setCurrentUser);
 
   useEffect(() => {
@@ -178,7 +179,7 @@ export default function FacultyDashboard() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          hallId: selectedHall._id,
+          hallId: selectedHall.id,
           bookingDate: selectedDateForBook,
           period: selectedPeriod,
           bookingReason,
@@ -262,10 +263,16 @@ export default function FacultyDashboard() {
             <h1 className="text-2xl font-bold text-blue-900">Faculty Dashboard</h1>
             <p className="text-sm text-blue-600">Book halls and manage your reservations</p>
           </div>
-          <Button onClick={logout} variant="outline" className="gap-2">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-4">
+            <div className="text-right hidden md:block border-r border-blue-100 pr-4 mr-2">
+              <p className="text-sm font-semibold text-blue-900">{currentUser?.name}</p>
+              <p className="text-xs text-blue-600 font-medium">{currentUser?.department}</p>
+            </div>
+            <Button onClick={logout} variant="outline" className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -335,12 +342,11 @@ export default function FacultyDashboard() {
               <div className="grid grid-cols-1 gap-4">
                 {halls.map((hall) => (
                   <Card
-                    key={hall._id}
-                    className={`cursor-pointer transition-all border-blue-200 hover:shadow-lg ${
-                      selectedHall?._id === hall._id
-                        ? "ring-2 ring-blue-500 bg-blue-50"
-                        : "hover:border-blue-300"
-                    }`}
+                    key={hall.id}
+                    className={`cursor-pointer transition-all border-blue-200 hover:shadow-lg ${selectedHall?.id === hall.id
+                      ? "ring-2 ring-blue-500 bg-blue-50"
+                      : "hover:border-blue-300"
+                      }`}
                     onClick={() => setSelectedHall(hall)}
                   >
                     <CardContent className="pt-6">
@@ -359,7 +365,7 @@ export default function FacultyDashboard() {
                             <strong>Amenities:</strong> {hall.amenities || "None"}
                           </p>
                         </div>
-                        {selectedHall?._id === hall._id && (
+                        {selectedHall?.id === hall.id && (
                           <Badge className="bg-blue-600 text-white">Selected</Badge>
                         )}
                       </div>
@@ -386,7 +392,7 @@ export default function FacultyDashboard() {
                       <p className="text-sm font-medium text-blue-900">Selected Hall:</p>
                       <p className="text-lg font-semibold text-blue-800">{selectedHall.name}</p>
                     </div>
-                    
+
                     <div>
                       <Label className="text-sm font-semibold text-gray-700">
                         Reason for Booking *
@@ -398,7 +404,7 @@ export default function FacultyDashboard() {
                         className="mt-2 h-20 resize-none border-blue-200 focus:border-blue-500"
                       />
                     </div>
-                    
+
                     <div>
                       <Label className="text-sm font-semibold text-gray-700">
                         Date *
@@ -411,7 +417,7 @@ export default function FacultyDashboard() {
                         className="mt-2 w-full border border-blue-200 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                       />
                     </div>
-                    
+
                     <div>
                       <Label className="text-sm font-semibold text-gray-700">
                         Time Period *
@@ -419,20 +425,19 @@ export default function FacultyDashboard() {
                       <div className="mt-2 space-y-2">
                         {PERIODS.map((period) => {
                           const booked = selectedDateForBook
-                            ? isSlotBooked(selectedHall._id, selectedDateForBook, period.id)
+                            ? isSlotBooked(selectedHall.id, selectedDateForBook, period.id)
                             : false;
                           return (
                             <button
                               key={period.id}
                               onClick={() => !booked && setSelectedPeriod(period.id)}
                               disabled={booked}
-                              className={`w-full py-3 px-4 text-sm rounded-lg border transition-all font-medium ${
-                                booked
-                                  ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200"
-                                  : selectedPeriod === period.id
+                              className={`w-full py-3 px-4 text-sm rounded-lg border transition-all font-medium ${booked
+                                ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200"
+                                : selectedPeriod === period.id
                                   ? "bg-blue-600 text-white border-blue-600 shadow-md"
                                   : "border-blue-200 hover:border-blue-500 hover:bg-blue-50 text-gray-700"
-                              }`}
+                                }`}
                             >
                               {period.time}
                               {booked && " (Booked)"}
@@ -441,7 +446,7 @@ export default function FacultyDashboard() {
                         })}
                       </div>
                     </div>
-                    
+
                     <Button
                       onClick={bookHall}
                       className="w-full bg-blue-600 hover:bg-blue-700 py-3 text-base font-semibold"
@@ -475,11 +480,11 @@ export default function FacultyDashboard() {
           ) : (
             <div className="space-y-4">
               {myBookings.map((booking) => {
-                const hall = halls.find((h) => h._id === booking.hallId);
+                const hall = halls.find((h) => h.id === booking.hallId);
                 const periodInfo = PERIODS.find((p) => p.id === booking.period);
 
                 return (
-                  <Card key={booking._id} className="border-blue-200 hover:shadow-lg transition-shadow">
+                  <Card key={booking.id} className="border-blue-200 hover:shadow-lg transition-shadow">
                     <CardContent className="pt-6">
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -527,7 +532,7 @@ export default function FacultyDashboard() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => cancelBooking(booking._id)}
+                            onClick={() => cancelBooking(booking.id)}
                             className="gap-2"
                           >
                             <XCircle className="h-4 w-4" />
