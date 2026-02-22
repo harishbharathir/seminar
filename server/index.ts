@@ -24,8 +24,8 @@ connectDB();
 // Initialize Socket.io
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? "https://seminar-zwim.onrender.com" 
+    origin: process.env.NODE_ENV === 'production'
+      ? "https://seminar-zwim.onrender.com"
       : "http://localhost:3000",
     credentials: true
   }
@@ -37,8 +37,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Dynamic CORS based on environment
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? 'https://seminar-zwim.onrender.com' 
+  origin: process.env.NODE_ENV === 'production'
+    ? 'https://seminar-zwim.onrender.com'
     : 'http://localhost:3000',
   credentials: true
 }));
@@ -48,10 +48,10 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'development-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { 
+  cookie: {
     secure: process.env.NODE_ENV === 'production', // true if on HTTPS
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000 
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
@@ -101,7 +101,7 @@ app.post('/api/auth/register', async (req, res) => {
     const { username, password, role, name, email, department } = req.body;
     const existingUser = await User.findOne({ username });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
-    
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await User.create({
       username,
@@ -120,7 +120,7 @@ app.post('/api/auth/login', (req, res, next) => {
   passport.authenticate('local', (err: any, user: any, info: any) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Login failed' });
-    
+
     req.logIn(user, (err) => {
       if (err) return next(err);
       res.json({ message: "Logged in", user: { id: user.id, username: user.username, role: user.role } });
@@ -161,18 +161,14 @@ app.post('/api/bookings', async (req, res) => {
 // --- STATIC ASSETS & SPA ROUTING ---
 // Resolve the path to client/dist relative to the root of your project
 const clientDistPath = resolve(__dirname, '../client/dist');
-
-// Serve the static files from the React/Vite build
 app.use(express.static(clientDistPath));
 
 // The "Catch-all" route for Single Page Applications
 // This MUST be the very last route in your file.
-app.get('*', (req, res) => {
-  // If the request starts with /api but didn't match any route, return 404
+app.get('/*path', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  // Otherwise, send the index.html for React Router to handle
   res.sendFile(join(clientDistPath, 'index.html'));
 });
 
