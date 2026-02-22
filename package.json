@@ -11,7 +11,7 @@
     "build:server": "tsx script/build.ts && echo 'Backend build complete'",
     "build:client": "vite build --outDir dist/public",
     "start:server": "cross-env NODE_ENV=production node dist/index.mjs",
-    "vercel-build": "npm run build:client",
+    "vercel-build": "npm run dev",
     "start": "cross-env NODE_ENV=production node dist/index.mjs",
     "seed": "tsx script/seed.ts",
     "test:login": "tsx script/test-login.ts",
@@ -91,7 +91,15 @@
     "xlsx": "^0.18.5",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.4.0",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.11",
+    "vite": "^7.1.9",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.27.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@tailwindcss/vite": "^4.1.14",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "typescript": "5.6.3"
   },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.4.4",
@@ -107,15 +115,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.5.13",
-    "@vitejs/plugin-react": "^5.0.4",
-    "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.0",
-    "cross-env": "^10.1.0",
-    "drizzle-kit": "^0.31.9",
-    "esbuild": "^0.27.3",
-    "postcss": "^8.5.6",
-    "typescript": "5.6.3",
-    "vite": "^7.1.9"
+    "drizzle-kit": "^0.31.9"
   },
   "optionalDependencies": {}
 }
