@@ -25,7 +25,7 @@ connectDB();
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.NODE_ENV === 'production'
-      ? "https://seminar-zwim.onrender.com"
+      ? "https://your-railway-app-url.up.railway.app" // Update this!
       : "http://localhost:3000",
     credentials: true
   }
@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 // Dynamic CORS based on environment
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
-    ? 'https://seminar-zwim.onrender.com'
+    ? 'https://your-railway-app-url.up.railway.app' // Update this!
     : 'http://localhost:3000',
   credentials: true
 }));
@@ -160,11 +160,11 @@ app.post('/api/bookings', async (req, res) => {
 
 // --- STATIC ASSETS & SPA ROUTING ---
 // Resolve the path to client/dist relative to the root of your project
-const clientDistPath = resolve(__dirname, '../client/dist');
+// Since index.mjs is in /dist and the frontend is in /dist/public
+const clientDistPath = resolve(__dirname, './public'); 
+
 app.use(express.static(clientDistPath));
 
-// The "Catch-all" route for Single Page Applications
-// This MUST be the very last route in your file.
 app.get('/*path', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
